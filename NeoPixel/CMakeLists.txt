@@ -8,5 +8,4 @@ project(Pico-FreeRTOS-NeoPixel)
 
 pico_sdk_init()
 
-#add_subdirectory(FreeRTOS)
 add_subdirectory(NeoPixelSource)

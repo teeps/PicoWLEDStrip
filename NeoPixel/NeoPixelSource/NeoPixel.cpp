@@ -1,12 +1,47 @@
 /**
- * Copyright (c) 2022 Raspberry Pi (Trading) Ltd.
- *
- * SPDX-License-Identifier: BSD-3-Clause
+ * @file NeoPixel.cpp
+ * @author Mark Tuma (marktuma@gmail.com)
+ * @brief Controls one or more strings of NeoPixel LEDs with integration with an MQTT broker, utlimately designed to work with Home Assistant or similar.
+ * 
+ * This project uses the Pico W board, along with a 74HCT125N chip to buffer the control signals for the NeoPixels.  NeoPixel control is achieved using a 
+ * slightly tweaked version of the example PIO program from the SDK.  The project uses LWIP for WiFi access and MQTT operation.
+ * 
+ * Peripherals / Software Components Used:
+ * - WiFi
+ * - MQTT
+ * - FreeRTOS
+ * - GPIO
+ * - PIO
+ * - RTC 
+ * 
+ * Functional Requirements:
+ * - FR1 - RGB Mode - Set all LEDs to defined RGB value
+ * - FR2 - Diurnal Mode - Vary the LED output to correspond to diurnal cycle, e.g. evening light should be warmer, midday light should be cooler
+ * - FR3 - Subscribe to MQTT topics for mode control, on/off control, RGB colour control, sunrise time, sunset time, current time
+ * - FR4 - Publish to MQTT topics: On/Off State, Mode, Colour
+ * - FR5 - HOSTNAME to be PICOLEDx, where x is an integer between 0 and 3 based on the input states of GPIO 14 and 15 (MSB) pins
+ * - FR6 - MQTT topic names to include an element x, where x is an integer between 0 and 3 based on the input states of GPIO 14 and 15 (MSB) pins
+ * 
+ * @todo FR1
+ * @todo FR2
+ * @todo FR2
+ * @todo FR3
+ * @todo FR4
+ * @todo FR6
+ * 
+ * @version 0.1
+ * @date 2022-11-26
+ * 
+ * @copyright Copyright (c) 2022
+ * 
  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include "lwipopts.h"
+#include "NeoPixel.h"
+#include "NeoPixelMQTT.h"
+#include "MQTTTaskInterface.h"
 
 extern "C" {
 #include "pico/stdlib.h"
@@ -30,9 +65,6 @@ extern "C" {
 char ssid[] = "WelcomeToTheNewWorld";
 /** @brief WiFi Password*/
 char pass[] = "Fallsch1rm";
-
-/** @brief MQTT Client*/
-//mqtt_client_t xMQTTClient;
 
 #define IS_RGBW false
 uint8_t const NUM_PIXELS = 10;
@@ -85,13 +117,27 @@ inline void vLedFlash()
     sleep_ms(250);
     cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
 }
+
+static uint8_t uiGetIdent();
+static uint8_t uiGetIdent()
+{
+    //Check the GPIO pins for ident setting
+    gpio_set_dir (14, false );
+    gpio_set_dir (15, false );
+    return gpio_get(14) + (gpio_get(15)<<1);
+}
+
 void vInitTask(void *params);
 void vInitTask(void *params)
 {
+    //Task Interface
+    TaskInterface_t * pTaskIF = static_cast<TaskInterface_t *>(params);
+    int8_t * piReturn = &(pTaskIF->iGoLED);
+    
     //set_sys_clock_48() and init Pico W;
     stdio_init_all();
-    int8_t * piReturn = static_cast<int8_t *>(params);
-    //Setup PIO Program for uint8_t * pUIReturn = static_cast<uint8_t *>params; NeoPixels
+
+    //Setup PIO Program for NeoPixels
     PIO pio = pio0;
     int sm = 0;
     uint offset = pio_add_program(pio, &ws2812_program);
@@ -99,7 +145,10 @@ void vInitTask(void *params)
     pio_sm_put_blocking(pio0, 0, 0x00000400); //blue
     for (uint8_t i=1; i<10; i++)
         pio_sm_put_blocking(pio0, 0, 0x00000000); 
-
+    
+    char cHostname[9]="PICOLEDx";
+    cHostname[8] = 0;
+    cHostname[7] = uiGetIdent() + '0';
     //Setup WiFi
 /*    PICO_OK = 0,
     PICO_ERROR_NONE = 0,
@@ -126,6 +175,10 @@ void vInitTask(void *params)
         pio_sm_put_blocking(pio0, 0, 0x00000000); 
 
     cyw43_arch_enable_sta_mode();
+    struct netif *n = &cyw43_state.netif[CYW43_ITF_STA];
+    netif_set_hostname(n,cHostname);
+    netif_set_up(n);
+
     pio_sm_put_blocking(pio0, 0, 0x04000400); //cyan
     for (uint8_t i=1; i<10; i++)
         pio_sm_put_blocking(pio0, 0, 0x00000000); 
@@ -145,6 +198,7 @@ void vInitTask(void *params)
     //Setup MQTT
     vTaskDelay(100);
     *piReturn =2;
+    pTaskIF->pMQTT->bConnectionStatus=true;
     while (1)
     { 
         vTaskDelay(2000);
@@ -155,7 +209,10 @@ void vInitTask(void *params)
 void vLedTask(void *params);
 void vLedTask(void *params)
 {
-    int8_t * piReturn = static_cast<int8_t *>(params);
+    //Task Interface
+    TaskInterface_t * pTaskIF = static_cast<TaskInterface_t *>(params);
+    int8_t * piReturn = &(pTaskIF->iGoLED);
+    
     uint32_t const cuiLEDCode1 = 0x10120000;
     uint32_t const cuiLEDCode2 = 0x20240000;
     while (*piReturn != 2) {
@@ -185,10 +242,15 @@ void vLedTask(void *params)
 
 int main() {
     //assert(iInit()==0);
-    TaskHandle_t task1, task2;
-    int8_t iGoLED;
-    xTaskCreate(vInitTask, "Init Task", configMINIMAL_STACK_SIZE, &iGoLED, 2, &task1);
-    xTaskCreate(vLedTask, "LED Task", configMINIMAL_STACK_SIZE, &iGoLED, 1, &task2);
+    MQTTTaskInterface MQTTIF;
+    MQTTIF.bConnectionStatus = false;
+    TaskInterface_t TaskInterface;
+    TaskInterface.pMQTT = &MQTTIF;
+
+    TaskHandle_t task1, task2, task3;
+    xTaskCreate(vInitTask, "Init Task", configMINIMAL_STACK_SIZE, static_cast<void *>(&TaskInterface), 2, &task1);
+    xTaskCreate(vLedTask, "LED Task", configMINIMAL_STACK_SIZE, static_cast<void *>(&TaskInterface), 1, &task2);
+    xTaskCreate(vMQTTInterface, "MQTT Task", configMINIMAL_STACK_SIZE, static_cast<void *>(&MQTTIF), 1, &task3);
     
     /* Start the tasks and timer running. */
     vTaskStartScheduler();
