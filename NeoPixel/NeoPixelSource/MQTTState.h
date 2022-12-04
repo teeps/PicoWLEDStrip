@@ -23,32 +23,72 @@ class MQTTState : public EntityState<MQTTTaskInterface>
     	virtual ~MQTTState() {};
 };
 
-class MQTTNotConnected : public MQTTState
+/**
+ * @brief Initial state before WiFi is established.  Also used in case Broker connection is refused.
+ * 
+ */
+class MQTTInitial : public MQTTState
 {
     public:    
         void enter(MQTTTaskInterface*) {};
         void advance(MQTTTaskInterface*);
         void exit(MQTTTaskInterface*);
-        ~MQTTNotConnected() {};
+        ~MQTTInitial() {};
         static MQTTState& GetInstance();
     private:
-        MQTTNotConnected () {}
-        MQTTNotConnected (const MQTTNotConnected&);
-        MQTTNotConnected & operator=(const MQTTNotConnected&);
+        MQTTInitial () {}
+        MQTTInitial (const MQTTInitial&);
+        MQTTInitial & operator=(const MQTTInitial&);
 };
 
-class MQTTConnected : public MQTTState
+class MQTTDiscovery : public MQTTState
 {
     public:    
-        void enter(MQTTTaskInterface*) {};
+        void enter(MQTTTaskInterface*);
         void advance(MQTTTaskInterface*) ;
         void exit(MQTTTaskInterface*) {};
-        ~MQTTConnected() {};
+        ~MQTTDiscovery() {};
         static MQTTState& GetInstance();
     private:
-        MQTTConnected () {}
-        MQTTConnected (const MQTTConnected&);
-        MQTTConnected & operator=(const MQTTConnected&);
+        MQTTDiscovery () {}
+        MQTTDiscovery (const MQTTDiscovery&);
+        MQTTDiscovery & operator=(const MQTTDiscovery&);
+};
+
+/**
+ * @brief Broker Connection Pending State
+ * 
+ */
+class MQTTConnect : public MQTTState
+{
+    public:    
+        void enter(MQTTTaskInterface*);
+        void advance(MQTTTaskInterface*) ;
+        void exit(MQTTTaskInterface*) {};
+        ~MQTTConnect() {};
+        static MQTTState& GetInstance();
+    private:
+        MQTTConnect () {}
+        MQTTConnect (const MQTTConnect&);
+        MQTTConnect & operator=(const MQTTConnect&);
+};
+
+/**
+ * @brief Connection established and discovery message sent, normal transfer state
+ * 
+ */
+class MQTTTransfer : public MQTTState
+{
+    public:    
+        void enter(MQTTTaskInterface*);
+        void advance(MQTTTaskInterface*) ;
+        void exit(MQTTTaskInterface*) {};
+        ~MQTTTransfer() {};
+        static MQTTState& GetInstance();
+    private:
+        MQTTTransfer () {}
+        MQTTTransfer (const MQTTTransfer&);
+        MQTTTransfer & operator=(const MQTTTransfer&);
 };
 
 #endif

@@ -99,4 +99,6 @@
 #define SLIP_DEBUG                  LWIP_DBG_OFF
 #define DHCP_DEBUG                  LWIP_DBG_OFF
 
+#define MQTT_OUTPUT_RINGBUF_SIZE 512
+
 #endif /* __LWIPOPTS_H__ */

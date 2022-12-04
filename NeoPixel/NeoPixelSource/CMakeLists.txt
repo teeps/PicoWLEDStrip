@@ -3,10 +3,13 @@ cmake_minimum_required(VERSION 3.12)
 add_executable(NeoPixel NeoPixel.cpp 
         NeoPixelMQTT.cpp 
         MQTTState.cpp
-        MQTTTaskInterface.cpp)
+        MQTTTaskInterface.cpp
+        ToText.cpp
+        RGBColour.cpp)
 pico_generate_pio_header(NeoPixel ${CMAKE_CURRENT_LIST_DIR}/NeoPixel.pio OUTPUT_DIR ${CMAKE_CURRENT_LIST_DIR})
 
-#target_sources(NeoPixel PRIVATE NeoPixel.cpp)
+
+target_sources(NeoPixel PRIVATE ${PICO_SDK_PATH}/lib/lwip/src/apps/mqtt/mqtt.c)
 
 set(FREERTOS_KERNEL_PATH /home/mark/pico/FreeRTOS-Kernel)
 

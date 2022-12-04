@@ -16,7 +16,14 @@ mqtt_client_t static_client;
 MQTTTaskInterface::MQTTTaskInterface ()
 {
     pMQTTClient = &static_client;
-    bConnectionStatus = false;
+    bWiFiConnectionStatus = false;
+    bBrokerConnectionStatus = false;
+    bUpdateColourStatus = false;
+    pxState = &(MQTTInitial::GetInstance());
+    TextAttributeType newEffect;
+    strncpy (newEffect.cData, "Static", 6);
+    Effect.uiSetAtt(newEffect);
+    EffectStatus.uiSetAtt(newEffect);
 }
 
 void MQTTTaskInterface::advance()

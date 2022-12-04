@@ -67,7 +67,7 @@ char ssid[] = "WelcomeToTheNewWorld";
 char pass[] = "Fallsch1rm";
 
 #define IS_RGBW false
-uint8_t const NUM_PIXELS = 10;
+uint8_t const NUM_PIXELS = 3;
 
 #define WS2812_PIN 1
 
@@ -146,9 +146,10 @@ void vInitTask(void *params)
     for (uint8_t i=1; i<10; i++)
         pio_sm_put_blocking(pio0, 0, 0x00000000); 
     
+    pTaskIF->pMQTT->uiIdent = uiGetIdent();
     char cHostname[9]="PICOLEDx";
     cHostname[8] = 0;
-    cHostname[7] = uiGetIdent() + '0';
+    cHostname[7] = pTaskIF->pMQTT->uiIdent + '0';
     //Setup WiFi
 /*    PICO_OK = 0,
     PICO_ERROR_NONE = 0,
@@ -198,12 +199,46 @@ void vInitTask(void *params)
     //Setup MQTT
     vTaskDelay(100);
     *piReturn =2;
-    pTaskIF->pMQTT->bConnectionStatus=true;
+    pTaskIF->pMQTT->bWiFiConnectionStatus=true;
     while (1)
     { 
         vTaskDelay(2000);
     }
     cyw43_arch_deinit();
+}
+
+static uint8_t powr10 (uint8_t power)
+{
+  uint8_t uiRetVal = 1;
+  for (uint8_t i=power; i>0; i--)
+    uiRetVal *=10;
+  return uiRetVal;
+}
+
+/** @brief returns a 32 bit unsigned integer from a text field of format 0x00000000
+ * 
+ * @return uint32_t 
+ */
+uint32_t uiGRBFromGRBText(char* cData, uint8_t uiSize)
+{
+    if (uiSize ==11)
+    {
+        uint32_t uiRetVal=0;
+        for (uint8_t i=2; i<11; i++)
+        {
+            uint8_t uiInteger;
+            if  (cData[i] >='0' && cData[i] <='9')
+                uiInteger  = cData[i] -'0';
+            else if (cData[i] >='a' && cData[i] <='f')
+                uiInteger = cData[i] - 'a' + 10;
+            else if (cData[i] >='A' && cData[i] <='F')
+                uiInteger = cData[i] - 'A' + 10;
+            else uiInteger=0;
+            uiRetVal += uiInteger << (4*(10-i)); //@todo The probelm is here
+        }
+        return uiRetVal;
+    } else
+        return 0;
 }
 
 void vLedTask(void *params);
@@ -213,44 +248,69 @@ void vLedTask(void *params)
     TaskInterface_t * pTaskIF = static_cast<TaskInterface_t *>(params);
     int8_t * piReturn = &(pTaskIF->iGoLED);
     
-    uint32_t const cuiLEDCode1 = 0x10120000;
-    uint32_t const cuiLEDCode2 = 0x20240000;
     while (*piReturn != 2) {
         vTaskDelay(1000);
     }
+    static uint32_t uiPreviousColour=0;
     while (1)
     {
-        for (uint8_t i=0; i<NUM_PIXELS; i++)
+        uint8_t uiLength;
+        char cAttributeText[20];
+        pTaskIF->pMQTT->LightOnCommand.vGetAttText(cAttributeText, uiLength);
+        TextAttributeType * puiMode =  pTaskIF->pMQTT->Effect.pGetPtr();
+        if (!strcmp(cAttributeText,"ON"))
         {
-            //vLEDStep(0x08,0x00,0x08,i);
-            pio_sm_put_blocking(pio0, 0, i%2==0 ? cuiLEDCode1 : cuiLEDCode2);
-            pio_sm_put_blocking(pio0, 0, i%2==1 ? cuiLEDCode1 : cuiLEDCode2);
-            pio_sm_put_blocking(pio0, 0, i%2==0 ? cuiLEDCode1 : cuiLEDCode2);
-            pio_sm_put_blocking(pio0, 0, i%2==1 ? cuiLEDCode1 : cuiLEDCode2);
-            pio_sm_put_blocking(pio0, 0, i%2==0 ? cuiLEDCode1 : cuiLEDCode2);
-            pio_sm_put_blocking(pio0, 0, i%2==1 ? cuiLEDCode1 : cuiLEDCode2);
-            pio_sm_put_blocking(pio0, 0, i%2==0 ? cuiLEDCode1 : cuiLEDCode2);
-            pio_sm_put_blocking(pio0, 0, i%2==1 ? cuiLEDCode1 : cuiLEDCode2);
-            pio_sm_put_blocking(pio0, 0, i%2==0 ? cuiLEDCode1 : cuiLEDCode2);
-            pio_sm_put_blocking(pio0, 0, i%2==1 ? cuiLEDCode1 : cuiLEDCode2);
-            vLedFlash();
-            vTaskDelay(5);
+            uint32_t uiLEDGRB=0;
+            if (!strncmp(puiMode->cData,"Static",6)) 
+            {
+                //Set colour mode
+                char cRGBCode[11];
+                RGBColour * pNewColour = pTaskIF->pMQTT->RGBCommand.pGetPtr();
+                uint8_t uiRed, uiGreen, uiBlue;
+                pNewColour->vGetColour(uiRed, uiGreen, uiBlue);
+                uiLEDGRB = (uiGreen << 24) | (uiRed << 16) | (uiBlue <<8);
+            } else
+            {
+                //Diurnal mode
+                uiLEDGRB = 0x10203000;
+            }
+            //Now load the value to the LEDs
+            
+            if (uiLEDGRB != uiPreviousColour)
+            {
+                for (uint8_t i=0; i<NUM_PIXELS; i++)
+                {
+                    pio_sm_put_blocking(pio0, 0, uiLEDGRB);
+                }
+                RGBColour * pUpdateColour = pTaskIF->pMQTT->RGBStatus.pGetPtr();
+                pUpdateColour->vSetColourFromGRB(uiLEDGRB);
+                pTaskIF->pMQTT->bUpdateColourStatus = true;
+            }
+            uiPreviousColour = uiLEDGRB;
+        } else
+        {
+            for (uint8_t i=0; i<NUM_PIXELS; i++)
+            {
+                pio_sm_put_blocking(pio0, 0, 0);
+            }
         }
+        vLedFlash();
         vTaskDelay(100);
     }
 }
+static MQTTTaskInterface MQTTIF;
 
 int main() {
     //assert(iInit()==0);
-    MQTTTaskInterface MQTTIF;
-    MQTTIF.bConnectionStatus = false;
+    
+    MQTTIF.bWiFiConnectionStatus = false;
     TaskInterface_t TaskInterface;
     TaskInterface.pMQTT = &MQTTIF;
 
     TaskHandle_t task1, task2, task3;
-    xTaskCreate(vInitTask, "Init Task", configMINIMAL_STACK_SIZE, static_cast<void *>(&TaskInterface), 2, &task1);
-    xTaskCreate(vLedTask, "LED Task", configMINIMAL_STACK_SIZE, static_cast<void *>(&TaskInterface), 1, &task2);
-    xTaskCreate(vMQTTInterface, "MQTT Task", configMINIMAL_STACK_SIZE, static_cast<void *>(&MQTTIF), 1, &task3);
+    xTaskCreate(vInitTask, "Init Task", configMINIMAL_STACK_SIZE, static_cast<void *>(&TaskInterface), 3, &task1);
+    xTaskCreate(vLedTask, "LED Task", configMINIMAL_STACK_SIZE, static_cast<void *>(&TaskInterface), 2, &task2);
+    xTaskCreate(vMQTTInterface, "MQTT Task", 512, static_cast<void *>(&TaskInterface), 1, &task3);
     
     /* Start the tasks and timer running. */
     vTaskStartScheduler();
