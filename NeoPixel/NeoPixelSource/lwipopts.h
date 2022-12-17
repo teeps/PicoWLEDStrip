@@ -17,6 +17,9 @@
 
 #define LWIP_TIMEVAL_PRIVATE        0
 
+//MQTT Config
+#define MQTT_REQ_MAX_IN_FLIGHT      6
+
 // allow override in some examples
 #ifndef NO_SYS
 #define NO_SYS                      0

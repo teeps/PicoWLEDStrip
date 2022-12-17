@@ -116,4 +116,10 @@ void MQTTTransfer::advance(MQTTTaskInterface * pMQTT)
             pMQTT->bUpdateColourStatus = false;
         }
     }
+    if (!mqtt_client_is_connected (pMQTT->pMQTTClient))
+    {
+        //Connection lost, disconnect and revert to initial state
+        mqtt_disconnect(pMQTT->pMQTTClient);
+        pMQTT->SetState(MQTTInitial::GetInstance());
+    }
 }

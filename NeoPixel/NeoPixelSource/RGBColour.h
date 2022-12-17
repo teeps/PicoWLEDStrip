@@ -41,7 +41,10 @@ public:
         Blue = BlueSrc;
     };
     void ColourFromText(const char *, uint16_t);
+    /** @brief Set the colour from a 24 bit GRB value, shifted so bytes are GRB0*/
     void vSetColourFromGRB(uint32_t);
+    /** @brief Set the colour from a 24 bit RGB value, shifted so bytes are RGB0*/
+    void vSetColourFromRGB(uint32_t);
     /** @brief Get the stored colour as RGB text, rrr,ggg,bbb*/
     void vGetRGBText(char *, uint8_t &) const;
     ~RGBColour() {};

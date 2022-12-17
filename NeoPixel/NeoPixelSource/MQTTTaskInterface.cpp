@@ -24,6 +24,7 @@ MQTTTaskInterface::MQTTTaskInterface ()
     strncpy (newEffect.cData, "Static", 6);
     Effect.uiSetAtt(newEffect);
     EffectStatus.uiSetAtt(newEffect);
+    Brightness.uiSetAtt(127U);
 }
 
 void MQTTTaskInterface::advance()

@@ -5,7 +5,9 @@ add_executable(NeoPixel NeoPixel.cpp
         MQTTState.cpp
         MQTTTaskInterface.cpp
         ToText.cpp
-        RGBColour.cpp)
+        RGBColour.cpp
+        NeoPixelDriver.cpp
+        DotStarDriver.cpp)
 pico_generate_pio_header(NeoPixel ${CMAKE_CURRENT_LIST_DIR}/NeoPixel.pio OUTPUT_DIR ${CMAKE_CURRENT_LIST_DIR})
 
 
@@ -24,6 +26,8 @@ target_link_libraries(NeoPixel PRIVATE
     pico_stdlib 
     FreeRTOS-Kernel-Heap4
     hardware_pio
+    hardware_spi
+    hardware_dma
     pico_cyw43_arch_lwip_sys_freertos
     pico_lwip
     )

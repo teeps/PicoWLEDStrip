@@ -76,6 +76,7 @@ void vMQTTConnect(mqtt_client_t * pMQTTClient)
     ci.client_id = "PICOLEDx";
     ci.client_user = "MQTTLighting";
     ci.client_pass = "MQTTLighting";
+    ci.keep_alive = 12;
 
     /* Initiate client and connect to server, if this fails immediately an error code is returned
         otherwise mqtt_connection_cb will be called with connection result after attempting 
@@ -114,6 +115,8 @@ void vSubscribeTopics(mqtt_client_t *client, void* arg)
     cEffectStatusTopic[16] = pMQTT->uiIdent + '0';
     cColourTopic[16] = pMQTT->uiIdent + '0';
     cColourStatusTopic[16] = pMQTT->uiIdent + '0';
+    cBrightnessTopic[16] = pMQTT->uiIdent + '0';
+    cBrightnessStatusTopic[16] = pMQTT->uiIdent + '0';
     err_t err;   
     err = mqtt_subscribe(client, cControlTopic, 1, mqtt_control_sub_request_cb, arg);
     if(err != ERR_OK) {
@@ -126,6 +129,10 @@ void vSubscribeTopics(mqtt_client_t *client, void* arg)
     err = mqtt_subscribe(client, cEffectTopic, 1, mqtt_mode_sub_request_cb, arg);
     if(err != ERR_OK) {
       printf("mqtt_subscribe (mode) return: %d\n", err);
+    }
+    err = mqtt_subscribe(client, cBrightnessTopic, 1, mqtt_brightness_sub_request_cb, arg);
+    if(err != ERR_OK) {
+      printf("mqtt_subscribe (brightness) return: %d\n", err);
     }
     err = mqtt_subscribe(client, "home-assistant/data/sunrise", 1, mqtt_sunrise_sub_request_cb, arg);
     if(err != ERR_OK) {
@@ -152,7 +159,8 @@ static void mqtt_connection_cb(mqtt_client_t *client, void *arg, mqtt_connection
   } else {
     printf("mqtt_connection_cb: Disconnected, reason: %d\n", status);
     pMQTT->bBrokerConnectionStatus = false;
-    /* Its more nice to be connected, so try to reconnect */
+    /* Its more nice to be connected, so try to reconnect, but wait five seconds so we don't spam */
+    vTaskDelay(5000);
     pMQTT->SetState(MQTTInitial::GetInstance());
   }  
 }
@@ -228,7 +236,7 @@ void vPublishRGBStatus(mqtt_client_t *client)
   err_t err;
   u8_t qos = 1; /* 0 1 or 2, see MQTT specification */
   u8_t retain = 1;
-  err = mqtt_publish(client, cColourStatusTopic, cPayload, sizeof(cPayload), qos, retain, NULL, NULL);
+  err = mqtt_publish(client, cColourStatusTopic, cPayload, uiLength, qos, retain, NULL, NULL);
   if(err != ERR_OK) {
     printf("Publish err: %d\n", err);
   }
@@ -311,32 +319,45 @@ static void mqtt_incoming_data_cb(void *arg, const u8_t *data, u16_t len, u8_t f
         switch (eIncomingPayload)
         {
             case LIGHT_CONTROL:
-                if (data[0] =='O' && data[1]=='N' && len==2)
-                {
-                  pMQTT->LightOnCommand.uiSetAtt(true);
-                  mqtt_publish(pMQTT->pMQTTClient,cStatusTopic,"ON",2,1,1,NULL,NULL);
-                }
-                else
-                {
-                  pMQTT->LightOnCommand.uiSetAtt(false);
-                  mqtt_publish(pMQTT->pMQTTClient,cStatusTopic,"OFF",3,1,1,NULL,NULL);
-                }
-                break;
+            {
+              if (data[0] =='O' && data[1]=='N' && len==2)
+              {
+                pMQTT->LightOnCommand.uiSetAtt(true);
+                mqtt_publish(pMQTT->pMQTTClient,cStatusTopic,"ON",2,1,1,NULL,NULL);
+              }
+              else
+              {
+                pMQTT->LightOnCommand.uiSetAtt(false);
+                mqtt_publish(pMQTT->pMQTTClient,cStatusTopic,"OFF",3,1,1,NULL,NULL);
+              }
+              break;
+            }
             case COLOUR:
-                {
-                  RGBColour NewColour;
-                  NewColour.ColourFromText(reinterpret_cast<char const *>(data), len);
-                  pMQTT->RGBCommand.uiSetAtt(NewColour);
-                  break;
-                }
+            {
+              RGBColour NewColour;
+              NewColour.ColourFromText(reinterpret_cast<char const *>(data), len);
+              pMQTT->RGBCommand.uiSetAtt(NewColour);
+              break;
+            }
+            case BRIGHTNESS:
+            {
+              uint8_t uiNewBrightness = std::stoi(reinterpret_cast<char const *>(data));
+              pMQTT->Brightness.uiSetAtt(uiNewBrightness);
+              char cText[4];
+              uint8_t uiLen = sprintf(cText, "%d",uiNewBrightness);
+              mqtt_publish(pMQTT->pMQTTClient,cBrightnessStatusTopic,cText,uiLen,1,1,NULL,NULL);
+              break;
+            }
             case EFFECT:
-                TextAttributeType newEffect;
-                newEffect.uiLength = len;
-                strncpy(newEffect.cData,reinterpret_cast<char const *>(data),len);
-                pMQTT->Effect.uiSetAtt(newEffect);
-                pMQTT->EffectStatus.uiSetAtt(newEffect);
-                mqtt_publish(pMQTT->pMQTTClient,cEffectStatusTopic,data,len,1,1,NULL,NULL);
-                break;
+            {
+              TextAttributeType newEffect;
+              newEffect.uiLength = len;
+              strncpy(newEffect.cData,reinterpret_cast<char const *>(data),len);
+              pMQTT->Effect.uiSetAtt(newEffect);
+              pMQTT->EffectStatus.uiSetAtt(newEffect);
+              mqtt_publish(pMQTT->pMQTTClient,cEffectStatusTopic,data,len,1,1,NULL,NULL);
+              break;
+            }
             default:
                 break;
         }

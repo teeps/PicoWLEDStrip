@@ -94,7 +94,7 @@ static void mqtt_colour_sub_request_cb(void *arg, err_t result);
  * @param arg 
  * @param result 
  */
-static void mqtt_brigthness_sub_request_cb(void *arg, err_t result);
+static void mqtt_brightness_sub_request_cb(void *arg, err_t result);
 
 /**
  * @brief Callback for mode subscription request

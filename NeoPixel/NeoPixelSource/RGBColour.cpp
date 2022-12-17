@@ -67,8 +67,14 @@ void RGBColour::vSetColourFromGRB(uint32_t uiColour)
   Blue = uiColour >> 8;
 }
 
+void RGBColour::vSetColourFromRGB(uint32_t uiColour)
+{
+  Red = uiColour >> 24;
+  Green = uiColour >> 16;
+  Blue = uiColour >> 8;
+}
+
 void RGBColour::vGetRGBText(char * cText, uint8_t & uiLength) const
 {
-  sprintf(cText, "%d,%d,%d", Red,Green,Blue);
-  uiLength = sizeof(cText);
+  uiLength = sprintf(cText, "%d,%d,%d", Red,Green,Blue);
 }

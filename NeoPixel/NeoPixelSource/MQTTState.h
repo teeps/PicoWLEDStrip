@@ -24,7 +24,7 @@ class MQTTState : public EntityState<MQTTTaskInterface>
 };
 
 /**
- * @brief Initial state before WiFi is established.  Also used in case Broker connection is refused.
+ * @brief Initial state before WiFi is established.  Also used in case Broker connection is refused, or if the connection is lost.
  * 
  */
 class MQTTInitial : public MQTTState
@@ -41,6 +41,7 @@ class MQTTInitial : public MQTTState
         MQTTInitial & operator=(const MQTTInitial&);
 };
 
+/** @brief Send the discovery topic to Home Assistant*/
 class MQTTDiscovery : public MQTTState
 {
     public:    

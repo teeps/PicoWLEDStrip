@@ -35,27 +35,44 @@
  * @copyright Copyright (c) 2022
  * 
  */
+//#define USE_NEOPIXEL
+#define USE_DOTSTAR
+
+extern "C" {
+#include "pico/stdlib.h"
+#include "pico/stdio.h"
+#include "hardware/pio.h"
+#include "hardware/clocks.h"
+#include "pico/cyw43_arch.h"
+#include "FreeRTOS.h"
+#include "task.h"
+}
+
 #include <stdio.h>
-#include <stdlib.h>
 #include <stdint.h>
 #include "lwipopts.h"
 #include "NeoPixel.h"
 #include "NeoPixelMQTT.h"
 #include "MQTTTaskInterface.h"
 
-extern "C" {
-#include "pico/stdlib.h"
-#include "hardware/pio.h"
-#include "hardware/clocks.h"
-#include "NeoPixel.pio.h"
-#include "pico/cyw43_arch.h"
-//#include "lwip/arch.h"
-//#include "lwip/sys.h"
-//#include "lwip/sockets.h"
-//#include "lwip/apps/mqtt.h"
-#include "FreeRTOS.h"
-#include "task.h"
-}
+/** @brief Defines the number of pixels in the string*/
+uint8_t const NUM_PIXELS = 12;
+
+#if defined(USE_NEOPIXEL)
+    #include "NeoPixelDriver.h"
+    NeoPixelDriver xPixelDriver;
+#elif defined(USE_DOTSTAR)
+    #include "DotStarDriver.h"
+    DotStarDriver xPixelDriver;
+#else
+    static_assert(0,"No LED Driver Defined");
+#endif
+
+#define REDLEDS {0xff,0x00,0x00}
+#define CYANLEDS {0x00,0xff,0xff}
+#define PURPLELEDS {0xff,0x00,0xff}
+#define BLUELEDS {0x00,0x00,0xff}
+#define GREENLEDS {0x00,0xff,0x00}
 
 #ifndef RUN_FREERTOS_ON_CORE
 #define RUN_FREERTOS_ON_CORE 0
@@ -66,50 +83,6 @@ char ssid[] = "WelcomeToTheNewWorld";
 /** @brief WiFi Password*/
 char pass[] = "Fallsch1rm";
 
-#define IS_RGBW false
-uint8_t const NUM_PIXELS = 3;
-
-#define WS2812_PIN 1
-
-static inline void put_pixel(uint32_t pixel_grb) {
-    pio_sm_put_blocking(pio0, 0, pixel_grb << 8u);
-}
-
-/**
- * @brief Sets the colour of consecutive LEDS to Red, Green and Blue, cycling the intensity over time  
- * 
- * @param uint8_t const uiPixelCount - Number of Pixels in the string
- * @param uint8_t & uiIntensity - Intensity Value 0-255
- */
-void pattern_rgbs(uint8_t const cuiPixelCount, uint8_t & uiIntensity) {
-    uint8_t const cuiMax = 0x0f; // let's not draw too much current!
-    if (uiIntensity > cuiMax) {uiIntensity = 0;}
-
-    for (int i = 0; i < cuiPixelCount; ++i) {
-        uint8_t uiColour = i % 3;
-        put_pixel(uiIntensity << (uiColour*8));
-    }
-
-    uiIntensity++;
-}
-
-inline void vLEDStep(uint8_t const cuiRed, uint8_t const cuiBlue, uint8_t const cuiGreen, uint8_t uiPosition)
-{
-    uint32_t uiDataWord = cuiGreen <<24 + cuiRed << 16 + cuiBlue<<8;
-    for (uint8_t i=0; i<NUM_PIXELS; i++)
-        pio_sm_put_blocking(pio0, 0, i==uiPosition ? uiDataWord : 0);
-}
-
-inline void set_value(uint8_t const cuiValue)
-{
-    uint32_t const cuiGREEN = cuiValue << 24;
-    uint32_t const cuiRED = cuiValue << 16;
-    uint32_t const cuiBLUE = cuiValue << 8;
-    pio_sm_put_blocking(pio0, 0, cuiGREEN);
-    pio_sm_put_blocking(pio0, 0, cuiRED);
-    pio_sm_put_blocking(pio0, 0, cuiBLUE);
-    pio_sm_put_blocking(pio0, 0, cuiGREEN);
-}
 
 inline void vLedFlash()
 {
@@ -136,15 +109,8 @@ void vInitTask(void *params)
     
     //set_sys_clock_48() and init Pico W;
     stdio_init_all();
-
-    //Setup PIO Program for NeoPixels
-    PIO pio = pio0;
-    int sm = 0;
-    uint offset = pio_add_program(pio, &ws2812_program);
-    ws2812_program_init(pio, sm, offset, WS2812_PIN, 800000, IS_RGBW);
-    pio_sm_put_blocking(pio0, 0, 0x00000400); //blue
-    for (uint8_t i=1; i<10; i++)
-        pio_sm_put_blocking(pio0, 0, 0x00000000); 
+    xPixelDriver.vLEDInit(NUM_PIXELS);
+    
     
     pTaskIF->pMQTT->uiIdent = uiGetIdent();
     char cHostname[9]="PICOLEDx";
@@ -161,50 +127,53 @@ void vInitTask(void *params)
     PICO_ERROR_IO = -6,*/
     //int iRetVal = cyw43_arch_init_with_country(CYW43_COUNTRY_UK);
     int iRetVal = cyw43_arch_init();
-
+    uint8_t const cuiRED[3] = REDLEDS;
+    uint8_t const cuiBLUE[3] = BLUELEDS;
+    uint8_t const cuiPURPLE[3] = PURPLELEDS;
+    uint8_t const cuiCYAN[3] = CYANLEDS;
+    uint8_t const cuiGREEN[3] = GREENLEDS;
+    uint8_t const cuiBrightness = 16;
     if (iRetVal < 0)
     {
         iRetVal *=-1;
-        for (int i=0; i< iRetVal; i++)
-        {
-            pio_sm_put_blocking(pio0, 0, 0x00040000); //red
-        }
+        xPixelDriver.vSetLEDs(cuiRED, cuiBrightness, iRetVal);
         *piReturn = -1;
     }
-    pio_sm_put_blocking(pio0, 0, 0x00040400); //purple
-    for (uint8_t i=1; i<10; i++)
-        pio_sm_put_blocking(pio0, 0, 0x00000000); 
-
+    xPixelDriver.vSetLEDs(cuiPURPLE, cuiBrightness, 1);
     cyw43_arch_enable_sta_mode();
     struct netif *n = &cyw43_state.netif[CYW43_ITF_STA];
     netif_set_hostname(n,cHostname);
     netif_set_up(n);
-
-    pio_sm_put_blocking(pio0, 0, 0x04000400); //cyan
-    for (uint8_t i=1; i<10; i++)
-        pio_sm_put_blocking(pio0, 0, 0x00000000); 
-
+    xPixelDriver.vSetLEDs(cuiCYAN, cuiBrightness, 1);
+    
     if (cyw43_arch_wifi_connect_timeout_ms(ssid, pass, CYW43_AUTH_WPA2_AES_PSK, 10000)) {
         printf("failed to connect\n");
-        pio_sm_put_blocking(pio0, 0, 0x00040000); //2 red
-        pio_sm_put_blocking(pio0, 0, 0x00040000);
+        xPixelDriver.vSetLEDs(cuiRED, cuiBrightness, 2);
         *piReturn = 1;
     }
     printf("connected\n");
-    printf("WS2812 Smoke Test, using pin %d", WS2812_PIN);
-    pio_sm_put_blocking(pio0, 0, 0x04000000); //green
-    for (uint8_t i=1; i<10; i++)
-        pio_sm_put_blocking(pio0, 0, 0x00000000); 
-
+    std::vector<PatternPair> xPattern;
+    xPattern.resize(static_cast<std::size_t>(2));
+    auto xPatternIterator = xPattern.begin();
+    xPatternIterator->uiRGB[0] = 0x00;
+    xPatternIterator->uiRGB[1] = 0xff;
+    xPatternIterator->uiRGB[2] = 0x00;
+    xPatternIterator->uiCount = 1;
+    xPatternIterator->uiBrightness = 0x40;
+    for (xPatternIterator; xPatternIterator!= xPattern.end(); ++xPatternIterator)
+    {
+        xPatternIterator->uiRGB[0] = 0x00;
+        xPatternIterator->uiRGB[1] = 0x00;
+        xPatternIterator->uiRGB[2] = 0x00;    
+        xPatternIterator->uiCount = NUM_PIXELS-1;
+        xPatternIterator->uiBrightness = 0x40;
+    }
+    xPixelDriver.vSetLEDFromVector(xPattern);
     //Setup MQTT
     vTaskDelay(100);
     *piReturn =2;
     pTaskIF->pMQTT->bWiFiConnectionStatus=true;
-    while (1)
-    { 
-        vTaskDelay(2000);
-    }
-    cyw43_arch_deinit();
+    vTaskDelete(NULL);
 }
 
 static uint8_t powr10 (uint8_t power)
@@ -219,7 +188,7 @@ static uint8_t powr10 (uint8_t power)
  * 
  * @return uint32_t 
  */
-uint32_t uiGRBFromGRBText(char* cData, uint8_t uiSize)
+/* uint32_t uiGRBFromGRBText(char* cData, uint8_t uiSize)
 {
     if (uiSize ==11)
     {
@@ -240,6 +209,7 @@ uint32_t uiGRBFromGRBText(char* cData, uint8_t uiSize)
     } else
         return 0;
 }
+ */
 
 void vLedTask(void *params);
 void vLedTask(void *params)
@@ -252,6 +222,7 @@ void vLedTask(void *params)
         vTaskDelay(1000);
     }
     static uint32_t uiPreviousColour=0;
+    static uint32_t uiPreviousBrightness=0;
     while (1)
     {
         uint8_t uiLength;
@@ -260,7 +231,7 @@ void vLedTask(void *params)
         TextAttributeType * puiMode =  pTaskIF->pMQTT->Effect.pGetPtr();
         if (!strcmp(cAttributeText,"ON"))
         {
-            uint32_t uiLEDGRB=0;
+            uint32_t uiLEDRGB=0;
             if (!strncmp(puiMode->cData,"Static",6)) 
             {
                 //Set colour mode
@@ -268,31 +239,32 @@ void vLedTask(void *params)
                 RGBColour * pNewColour = pTaskIF->pMQTT->RGBCommand.pGetPtr();
                 uint8_t uiRed, uiGreen, uiBlue;
                 pNewColour->vGetColour(uiRed, uiGreen, uiBlue);
-                uiLEDGRB = (uiGreen << 24) | (uiRed << 16) | (uiBlue <<8);
+                uiLEDRGB = (uiRed << 24) | (uiGreen << 16) | (uiBlue <<8);
             } else
             {
                 //Diurnal mode
-                uiLEDGRB = 0x10203000;
+                uiLEDRGB = 0x10203000;
             }
             //Now load the value to the LEDs
-            
-            if (uiLEDGRB != uiPreviousColour)
+            //brightness modification
+            uint8_t *puiBrightness = pTaskIF->pMQTT->Brightness.pGetPtr();
+            if (uiLEDRGB!= uiPreviousColour || *puiBrightness != uiPreviousBrightness)
             {
-                for (uint8_t i=0; i<NUM_PIXELS; i++)
-                {
-                    pio_sm_put_blocking(pio0, 0, uiLEDGRB);
-                }
+                uint8_t uiRGB[3];
+                uiRGB[0] = (uiLEDRGB & 0xff000000) >> 24;
+                uiRGB[1] = (uiLEDRGB & 0x00ff0000) >> 16;
+                uiRGB[2] = (uiLEDRGB & 0x0000ff00) >> 8;
+                xPixelDriver.vSetLEDs(uiRGB, *puiBrightness, NUM_PIXELS);
                 RGBColour * pUpdateColour = pTaskIF->pMQTT->RGBStatus.pGetPtr();
-                pUpdateColour->vSetColourFromGRB(uiLEDGRB);
+                pUpdateColour->vSetColourFromRGB(uiLEDRGB);
                 pTaskIF->pMQTT->bUpdateColourStatus = true;
             }
-            uiPreviousColour = uiLEDGRB;
+            uiPreviousColour = uiLEDRGB;
+            uiPreviousBrightness = *puiBrightness;
         } else
         {
-            for (uint8_t i=0; i<NUM_PIXELS; i++)
-            {
-                pio_sm_put_blocking(pio0, 0, 0);
-            }
+            uint8_t uiRGBOFF[3] = {0,0,0};
+            xPixelDriver.vSetLEDs(uiRGBOFF,0, NUM_PIXELS);
         }
         vLedFlash();
         vTaskDelay(100);
