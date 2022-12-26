@@ -10,6 +10,8 @@
  */
 #define DEBUG_DISCOVERY
 #define DEBUG_CONNECT
+//#define DEBUG_vMQTTInterface
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -21,21 +23,25 @@
 #include "MQTTTaskInterface.h"
 #include "RGBColour.h"
 
+#if defined(DEBUG_DISCOVERY) || defined(DEBUG_CONNECT)
+#include "PixelDriver.h"
+#include <vector>
+#include "PatternPair.h"
+#endif
+
 extern "C" {
 #include "pico/stdlib.h"
 #include "hardware/clocks.h"
 #include "pico/cyw43_arch.h"
-//#include "lwip/arch.h"
-//#include "lwip/sys.h"
-//#include "lwip/sockets.h"
 #include "lwip/apps/mqtt.h"
 #include "lwip/apps/mqtt_priv.h"
 #include "FreeRTOS.h"
-#include "hardware/pio.h"
 #include "task.h"
 }
+
 /** @brief MQTT Task Interface*/
 static MQTTTaskInterface*  pMQTT;
+extern PixelDriver xPixelDriver;
 
 static char cControlTopic[] = "lighting/picoledx/control";
 static char cStatusTopic[] = "lighting/picoledx/status";
@@ -90,11 +96,26 @@ void vMQTTConnect(mqtt_client_t * pMQTTClient)
     if(err != ERR_OK) {
     printf("mqtt_connect return %d\n", err);
     #ifdef DEBUG_CONNECT
-    pio_sm_put_blocking(pio0, 0, 0x0); //off
-    pio_sm_put_blocking(pio0, 0, 0x0); //off
-    pio_sm_put_blocking(pio0, 0, 0x0); //off
-    pio_sm_put_blocking(pio0, 0, 0x0); //off
-    pio_sm_put_blocking(pio0, 0, 0x00040000); //red
+    {
+      std::vector<PatternPair> xPattern;
+      xPattern.resize(static_cast<std::size_t>(2));
+      auto xPatternIterator = xPattern.begin();
+      xPatternIterator->uiRGB[0] = 0x00;
+      xPatternIterator->uiRGB[1] = 0x00;
+      xPatternIterator->uiRGB[2] = 0x00;
+      xPatternIterator->uiCount = 4;
+      xPatternIterator->uiBrightness = 0x00;
+      xPatternIterator++;
+      for (xPatternIterator; xPatternIterator!= xPattern.end(); ++xPatternIterator)
+      {
+          xPatternIterator->uiRGB[0] = 0xff;
+          xPatternIterator->uiRGB[1] = 0x00;
+          xPatternIterator->uiRGB[2] = 0x00;    
+          xPatternIterator->uiCount = 1;
+          xPatternIterator->uiBrightness = 8;
+      }
+      xPixelDriver.vSetLEDFromVector(xPattern);
+    }
     #endif
     pMQTT->SetState(MQTTInitial::GetInstance());
     
@@ -341,7 +362,16 @@ static void mqtt_incoming_data_cb(void *arg, const u8_t *data, u16_t len, u8_t f
             }
             case BRIGHTNESS:
             {
-              uint8_t uiNewBrightness = std::stoi(reinterpret_cast<char const *>(data));
+              #ifdef DEBUG_vMQTTInterface
+              printf("Incoming Brightness\n");
+              printf("Received brightness command: ");
+              for (uint8_t i=0; i<len; i++)
+                printf("%c",data[i]);
+              printf ("\n");
+              #endif
+              char cBrightness[4]={0,0,0,0};
+              strncpy(cBrightness,reinterpret_cast<char const *>(data),len <= 3 ? len : 3);
+              uint8_t uiNewBrightness = std::stoi(cBrightness);
               pMQTT->Brightness.uiSetAtt(uiNewBrightness);
               char cText[4];
               uint8_t uiLen = sprintf(cText, "%d",uiNewBrightness);
@@ -393,12 +423,26 @@ void vPublishDiscovery(mqtt_client_s * pClient)
     printf("Issue here \n");
     
     #ifdef DEBUG_DISCOVERY
-    pio_sm_put_blocking(pio0, 0, 0x0); //off
-    pio_sm_put_blocking(pio0, 0, 0x0); //off
-    pio_sm_put_blocking(pio0, 0, 0x0); //off
-    pio_sm_put_blocking(pio0, 0, 0x0); //off
-    pio_sm_put_blocking(pio0, 0, 0x0); //off
-    pio_sm_put_blocking(pio0, 0, 0x01040000); //red
+    {
+      std::vector<PatternPair> xPattern;
+      xPattern.resize(static_cast<std::size_t>(2));
+      auto xPatternIterator = xPattern.begin();
+      xPatternIterator->uiRGB[0] = 0x00;
+      xPatternIterator->uiRGB[1] = 0x00;
+      xPatternIterator->uiRGB[2] = 0x00;
+      xPatternIterator->uiCount = 5;
+      xPatternIterator->uiBrightness = 0x00;
+      xPatternIterator++;
+      for (xPatternIterator; xPatternIterator!= xPattern.end(); ++xPatternIterator)
+      {
+          xPatternIterator->uiRGB[0] = 0xff;
+          xPatternIterator->uiRGB[1] = 0x00;
+          xPatternIterator->uiRGB[2] = 0x00;    
+          xPatternIterator->uiCount = 1;
+          xPatternIterator->uiBrightness = 8;
+      }
+      xPixelDriver.vSetLEDFromVector(xPattern);
+    }
     #endif
   }
 }

@@ -22,17 +22,17 @@ class PixelDriver
         /** @brief Perform required initialisations for the selected LED driver
         * @param[in] uint8_t - Number of pixels in string
         */
-        virtual void vLEDInit(uint8_t) = 0;
+        virtual void vLEDInit(uint8_t);
 
         /** @brief Set a number of LEDs to a given colour
          * @param[in] uint8_t const * - pointer to constant RGB array
          * @param[in] uin8_t const - Brightness
          * @param[in] uint8_t const - number of LEDs to set
          */
-        virtual void vSetLEDs(uint8_t const *, uint8_t, uint8_t const) = 0;
+        virtual void vSetLEDs(uint8_t const *, uint8_t, uint8_t const);
         /** @brief Set range of LEDs based on a vector of settings structures
          * @param[in] std::vector<PatternPair const & - Vector of settings
          */
-        virtual void vSetLEDFromVector(std::vector<PatternPair> const &) = 0;
+        virtual void vSetLEDFromVector(std::vector<PatternPair> const &) {};
         ~PixelDriver(){};
 };

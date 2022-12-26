@@ -37,11 +37,10 @@
  */
 //#define USE_NEOPIXEL
 #define USE_DOTSTAR
-
+#define DEBUG_vLedTask
 extern "C" {
 #include "pico/stdlib.h"
 #include "pico/stdio.h"
-#include "hardware/pio.h"
 #include "hardware/clocks.h"
 #include "pico/cyw43_arch.h"
 #include "FreeRTOS.h"
@@ -56,7 +55,7 @@ extern "C" {
 #include "MQTTTaskInterface.h"
 
 /** @brief Defines the number of pixels in the string*/
-uint8_t const NUM_PIXELS = 12;
+uint8_t const NUM_PIXELS = 27;
 
 #if defined(USE_NEOPIXEL)
     #include "NeoPixelDriver.h"
@@ -132,7 +131,7 @@ void vInitTask(void *params)
     uint8_t const cuiPURPLE[3] = PURPLELEDS;
     uint8_t const cuiCYAN[3] = CYANLEDS;
     uint8_t const cuiGREEN[3] = GREENLEDS;
-    uint8_t const cuiBrightness = 16;
+    uint8_t const cuiBrightness = 8;
     if (iRetVal < 0)
     {
         iRetVal *=-1;
@@ -159,14 +158,15 @@ void vInitTask(void *params)
     xPatternIterator->uiRGB[1] = 0xff;
     xPatternIterator->uiRGB[2] = 0x00;
     xPatternIterator->uiCount = 1;
-    xPatternIterator->uiBrightness = 0x40;
+    xPatternIterator->uiBrightness = 8;
+    xPatternIterator++;
     for (xPatternIterator; xPatternIterator!= xPattern.end(); ++xPatternIterator)
     {
         xPatternIterator->uiRGB[0] = 0x00;
         xPatternIterator->uiRGB[1] = 0x00;
         xPatternIterator->uiRGB[2] = 0x00;    
         xPatternIterator->uiCount = NUM_PIXELS-1;
-        xPatternIterator->uiBrightness = 0x40;
+        xPatternIterator->uiBrightness = 0;
     }
     xPixelDriver.vSetLEDFromVector(xPattern);
     //Setup MQTT
@@ -183,33 +183,6 @@ static uint8_t powr10 (uint8_t power)
     uiRetVal *=10;
   return uiRetVal;
 }
-
-/** @brief returns a 32 bit unsigned integer from a text field of format 0x00000000
- * 
- * @return uint32_t 
- */
-/* uint32_t uiGRBFromGRBText(char* cData, uint8_t uiSize)
-{
-    if (uiSize ==11)
-    {
-        uint32_t uiRetVal=0;
-        for (uint8_t i=2; i<11; i++)
-        {
-            uint8_t uiInteger;
-            if  (cData[i] >='0' && cData[i] <='9')
-                uiInteger  = cData[i] -'0';
-            else if (cData[i] >='a' && cData[i] <='f')
-                uiInteger = cData[i] - 'a' + 10;
-            else if (cData[i] >='A' && cData[i] <='F')
-                uiInteger = cData[i] - 'A' + 10;
-            else uiInteger=0;
-            uiRetVal += uiInteger << (4*(10-i)); //@todo The probelm is here
-        }
-        return uiRetVal;
-    } else
-        return 0;
-}
- */
 
 void vLedTask(void *params);
 void vLedTask(void *params)
@@ -263,8 +236,11 @@ void vLedTask(void *params)
             uiPreviousBrightness = *puiBrightness;
         } else
         {
-            uint8_t uiRGBOFF[3] = {0,0,0};
-            xPixelDriver.vSetLEDs(uiRGBOFF,0, NUM_PIXELS);
+            uint8_t uiRGB[3];
+            uiRGB[0] = (uiPreviousColour & 0xff000000) >> 24;
+            uiRGB[1] = (uiPreviousColour & 0x00ff0000) >> 16;
+            uiRGB[2] = (uiPreviousColour & 0x0000ff00) >> 8;        
+            xPixelDriver.vSetLEDs(uiRGB,0, NUM_PIXELS);
         }
         vLedFlash();
         vTaskDelay(100);

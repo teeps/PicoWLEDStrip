@@ -21,11 +21,14 @@ extern "C" {
 }
 #include <stdint.h>
 #include <stdio.h>
+static constexpr uint8_t cuiBytesPerPixel=4; //4 bytes per pixel
+static constexpr uint8_t cuiStartFrameBytes=4; //4 bytes per pixel
+static constexpr uint8_t cuiEndFrameBytes=4; //4 bytes per pixel
 void DotStarDriver::vLEDInit(uint8_t uiCount)
 {
     //Setup buffer
     uiPixelCount = uiCount;
-    uiBufferSize = uiCount*4+4+4;
+    uiBufferSize = uiCount * cuiBytesPerPixel + cuiStartFrameBytes + cuiEndFrameBytes;
     puiDataBuffer = new uint8_t [uiBufferSize];
     assert(puiDataBuffer!=0);
     for (uint16_t i=0; i<(uiBufferSize); i++)
@@ -78,10 +81,10 @@ void DotStarDriver::vAddEndFrame()
 {
     //Add end frame
     uint16_t uiIdx = uiBufferSize-4;
-    puiDataBuffer[uiIdx++] = 0xff;
-    puiDataBuffer[uiIdx++] = 0xff;
-    puiDataBuffer[uiIdx++] = 0xff;
-    puiDataBuffer[uiIdx++] = 0xff; 
+    puiDataBuffer[uiIdx++] = 0x00;
+    puiDataBuffer[uiIdx++] = 0x00;
+    puiDataBuffer[uiIdx++] = 0x00;
+    puiDataBuffer[uiIdx++] = 0x00; 
     
 }
 
@@ -91,10 +94,12 @@ void DotStarDriver::vSetLEDs(uint8_t const * puiRGB, uint8_t uiBrightness, uint8
 
     for (uint8_t i=0; i<uiBufferSize; i++)
         puiDataBuffer[i]=0;
+    for (uint8_t i=4; i<uiBufferSize; i+=4)
+        puiDataBuffer[i]=0xe0;
     
-    for (uint16_t i=0; i<cuiCount; i+=4)
+    for (uint16_t i=0; i<uiBufferSize; i+=4)
     {
-        if (i>uiPixelCount)
+        if (i>cuiCount*4)
             break;
         puiDataBuffer[i+4]=(uiBrightness >> 3) | 0xe0;
         puiDataBuffer[i+5] = puiRGB[2]; //Blue
@@ -113,8 +118,8 @@ void DotStarDriver::vSendDMA()
     if ( bSPIReady && bDMAReady)
     {
         //Reset DMA Tx Start Address, then start send
-        dma_channel_set_read_addr(uiDMATxChannel,puiDataBuffer,false);
-        dma_start_channel_mask((1U << uiDMATxChannel) | (1U << uiDMARxChannel));
+        dma_channel_set_read_addr(uiDMATxChannel,puiDataBuffer,true);
+        //dma_start_channel_mask((1U << uiDMATxChannel) | (1U << uiDMARxChannel));
     } else
     {
         //Some error indication?
@@ -125,11 +130,11 @@ void DotStarDriver::vSendDMA()
 void DotStarDriver::vSetLEDFromVector(std::vector<PatternPair> const & xPatternPair)
 {
     //Fill the buffer, bytes 0-3 must be all zero
-    for (uint8_t i=0; i<4; i++)
+    for (uint8_t i=0; i<uiBufferSize; i++)
         puiDataBuffer[i]=0;
     auto xPatternIterator = xPatternPair.begin();
     
-    uint16_t uiBufferIdx = 5;
+    uint16_t uiBufferIdx = 4;
     for (xPatternIterator; xPatternIterator!= xPatternPair.end(); ++xPatternIterator)
     {
         for (uint16_t i=0; i< xPatternIterator->uiCount; i++)

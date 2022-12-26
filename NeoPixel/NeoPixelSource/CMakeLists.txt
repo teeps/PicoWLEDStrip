@@ -30,6 +30,7 @@ target_link_libraries(NeoPixel PRIVATE
     hardware_dma
     pico_cyw43_arch_lwip_sys_freertos
     pico_lwip
+    #pico_stdio_semihosting
     )
 
 pico_add_extra_outputs(NeoPixel)
