@@ -60,7 +60,6 @@ void vMQTTInterface (void *params)
     pMQTT = pTaskIF->pMQTT;
     //Publish stuff
     
-    int8_t * piReturn = &(pTaskIF->iGoLED);
     while (1)
     {
         pMQTT->advance();
@@ -68,8 +67,10 @@ void vMQTTInterface (void *params)
     }
 }
 
+/** @brief Callback function for response to an MQTT connection request*/
 static void  mqtt_connection_cb(mqtt_client_t *client, void *arg, mqtt_connection_status_t status);
 
+/** @brief Create the connection to the MQTT server*/
 void vMQTTConnect(mqtt_client_t * pMQTTClient)
 {
     struct mqtt_connect_client_info_t ci;
@@ -129,7 +130,7 @@ void vSubscribeTopics(mqtt_client_t *client, void* arg)
   /* Setup callback for incoming publish requests */
     mqtt_set_inpub_callback(client, mqtt_incoming_publish_cb, mqtt_incoming_data_cb, &eIncomingPayload);
     
-    /* Subscribe to a topic named "subtopic" with QoS level 1, call mqtt_sub_request_cb with result */ 
+    //Set the ident number on each topic
     cControlTopic[16] = pMQTT->uiIdent + '0';
     cStatusTopic[16] = pMQTT->uiIdent + '0';
     cEffectTopic[16] = pMQTT->uiIdent + '0';
@@ -139,6 +140,7 @@ void vSubscribeTopics(mqtt_client_t *client, void* arg)
     cBrightnessTopic[16] = pMQTT->uiIdent + '0';
     cBrightnessStatusTopic[16] = pMQTT->uiIdent + '0';
     err_t err;   
+    /* Individual topic subscriptions follow */ 
     err = mqtt_subscribe(client, cControlTopic, 1, mqtt_control_sub_request_cb, arg);
     if(err != ERR_OK) {
       printf("mqtt_subscribe (control) return: %d\n", err);
@@ -312,7 +314,9 @@ static uint8_t powr10 (uint8_t power)
     uiRetVal *=10;
   return uiRetVal;
 }
-uint8_t uiTextToU8(char const * cText)
+
+/** @brief Convert a string with a hex RGB value to an eight bit colour value*/
+static uint8_t uiTextToU8(char const * cText)
 {
   uint8_t uiSize = sizeof(cText);
   uint8_t uiReturnValue=0;

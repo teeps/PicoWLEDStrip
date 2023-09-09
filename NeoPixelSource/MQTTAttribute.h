@@ -15,8 +15,8 @@
 #include <cstring>
 #include "ToText.h"
 
-template <class T>
-class MQTTAttribute
+/** @brief Templated class for handling attributes from MQTT comms*/
+template <class T> class MQTTAttribute
 {
     public:
         /**
@@ -65,15 +65,25 @@ class MQTTAttribute
             xAtt = T(); //initialiser for templated type
             xDelta = T(); //initialiser for templated type
         };  
+        /** @brief NOT IMPLEMENTED*/
         void vSetPublish (bool);
+        /** @brief NOT IMPLEMENTED*/
         void vSetSubscribe (bool);
+        /** @brief NOT IMPLEMENTED*/
         void vSetInterval (uint32_t);
+        /** @brief NOT IMPLEMENTED*/
         void vSetMode(ePublishingModes);
+        /** @brief NOT IMPLEMENTED*/
         void vSetDelta(T);
+        /** @brief NOT IMPLEMENTED*/
         bool bGetSubscribe() const;
+        /** @brief NOT IMPLEMENTED*/
         bool bGetPublish() const;
+        /** @brief NOT IMPLEMENTED*/
         uint32_t uiGetInterval();
+        /** @brief NOT IMPLEMENTED*/
         bool bCheckPublishCondition(uint64_t) const;
+        /** @brief NOT IMPLEMENTED*/
         void vSetPublishedTime(uint64_t);
     private:
         /** @brief The attribute data*/

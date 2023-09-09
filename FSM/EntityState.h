@@ -10,9 +10,8 @@
  */
 
 #pragma once
-
-template <class T>
-class EntityState
+/** @brief A generic templated state class for use in a state machine*/
+template <class T> class EntityState
 {
 public:
     /** @brief Actions on state entry*/

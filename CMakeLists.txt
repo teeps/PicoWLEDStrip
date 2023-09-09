@@ -9,3 +9,9 @@ project(Pico-FreeRTOS-NeoPixel)
 pico_sdk_init()
 
 add_subdirectory(NeoPixelSource)
+#add_subdirectory(tests)
+
+#option(COMPILE_TESTS "Compile the tests" OFF)
+#if(COMPILE_TESTS)
+#  add_subdirectory(tests)
+#endif(COMPILE_TESTS)

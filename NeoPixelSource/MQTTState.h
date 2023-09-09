@@ -12,8 +12,9 @@
 #define _MQTTSTATE_H
 #include "EntityState.h"
 
-class MQTTTaskInterface;
+class MQTTTaskInterface; //Class is defined elsewhere, but can't be included here as that would lead to circular references, hence this forward declaration
 
+/** @brief State class for MQTT state machine*/
 class MQTTState : public EntityState<MQTTTaskInterface>
 {   
     public:

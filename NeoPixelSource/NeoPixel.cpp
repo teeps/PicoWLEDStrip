@@ -22,8 +22,6 @@
  * - FR5 - HOSTNAME to be PICOLEDx, where x is an integer between 0 and 3 based on the input states of GPIO 14 and 15 (MSB) pins
  * - FR6 - MQTT topic names to include an element x, where x is an integer between 0 and 3 based on the input states of GPIO 14 and 15 (MSB) pins
  * 
- * @todo FR1
- * @todo FR2
  * @todo FR2
  * @todo FR3
  * @todo FR4
@@ -82,14 +80,26 @@ char ssid[] = "WelcomeToTheNewWorld";
 /** @brief WiFi Password*/
 char pass[] = "Fallsch1rm";
 
-
+/** @brief Flash the status indicator LED on for a fixed 250 ms*/
 inline void vLedFlash()
 {
     cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-    sleep_ms(250);
+    //sleep_ms(250);
+    vTaskDelay(250);
     cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
 }
 
+/** @brief Flash the status indicator LED on for up to 255 ms
+ * @param[in] uint8_t uiDelay
+ */
+inline void vLedFlash(uint8_t uiDelay)
+{
+    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+    vTaskDelay(uiDelay);
+    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+}
+
+/** @brief Checks GPIO pins 14 and 15 and returns the ID number required to set the hostname*/
 static uint8_t uiGetIdent();
 static uint8_t uiGetIdent()
 {
@@ -99,32 +109,43 @@ static uint8_t uiGetIdent()
     return gpio_get(14) + (gpio_get(15)<<1);
 }
 
+/** @brief Initialise various parameters and subsystems
+ * 
+ * This function:
+ * - Initialise the NeoPixel driver with the correct number of LEDs fitted
+ * - Sets the hostname according to IO pins
+ * - Sets up the WiFi module with some LED indications of various stages
+ * 
+ *  The Pico SDK returns these error codes on WiFi setup:
+ *  PICO_OK = 0,
+ *  PICO_ERROR_NONE = 0,
+ *  PICO_ERROR_TIMEOUT = -1,
+ *  PICO_ERROR_GENERIC = -2,
+ *  PICO_ERROR_NO_DATA = -3,
+ *  PICO_ERROR_NOT_PERMITTED = -4,
+ *  PICO_ERROR_INVALID_ARG = -5,
+ *  PICO_ERROR_IO = -6,
+ *
+ * @param[inout] (void *) TaskInterface_t *  
+*/
 void vInitTask(void *params);
 void vInitTask(void *params)
 {
     //Task Interface
     TaskInterface_t * pTaskIF = static_cast<TaskInterface_t *>(params);
-    int8_t * piReturn = &(pTaskIF->iGoLED);
+    eGOLEDValues * piReturn = &(pTaskIF->eGoLED);
     
     //set_sys_clock_48() and init Pico W;
     stdio_init_all();
+
+    //Initialise NeoPixel driver
     xPixelDriver.vLEDInit(NUM_PIXELS);
-    
     
     pTaskIF->pMQTT->uiIdent = uiGetIdent();
     char cHostname[9]="PICOLEDx";
     cHostname[8] = 0;
     cHostname[7] = pTaskIF->pMQTT->uiIdent + '0';
-    //Setup WiFi
-/*    PICO_OK = 0,
-    PICO_ERROR_NONE = 0,
-    PICO_ERROR_TIMEOUT = -1,
-    PICO_ERROR_GENERIC = -2,
-    PICO_ERROR_NO_DATA = -3,
-    PICO_ERROR_NOT_PERMITTED = -4,
-    PICO_ERROR_INVALID_ARG = -5,
-    PICO_ERROR_IO = -6,*/
-    //int iRetVal = cyw43_arch_init_with_country(CYW43_COUNTRY_UK);
+    //Setup WiFi    
     int iRetVal = cyw43_arch_init();
     uint8_t const cuiRED[3] = REDLEDS;
     uint8_t const cuiBLUE[3] = BLUELEDS;
@@ -134,9 +155,10 @@ void vInitTask(void *params)
     uint8_t const cuiBrightness = 8;
     if (iRetVal < 0)
     {
+        //SDK returned an error code
         iRetVal *=-1;
         xPixelDriver.vSetLEDs(cuiRED, cuiBrightness, iRetVal);
-        *piReturn = -1;
+        *piReturn = eGOLEDValues::GOLED_WIFI_SETUP_ERROR;
     }
     xPixelDriver.vSetLEDs(cuiPURPLE, cuiBrightness, 1);
     cyw43_arch_enable_sta_mode();
@@ -148,7 +170,7 @@ void vInitTask(void *params)
     if (cyw43_arch_wifi_connect_timeout_ms(ssid, pass, CYW43_AUTH_WPA2_AES_PSK, 10000)) {
         printf("failed to connect\n");
         xPixelDriver.vSetLEDs(cuiRED, cuiBrightness, 2);
-        *piReturn = 1;
+        *piReturn = eGOLEDValues::GOLED_WIFI_CONNECT_TIMEOUT;
     }
     printf("connected\n");
     std::vector<PatternPair> xPattern;
@@ -171,11 +193,12 @@ void vInitTask(void *params)
     xPixelDriver.vSetLEDFromVector(xPattern);
     //Setup MQTT
     vTaskDelay(100);
-    *piReturn =2;
+    *piReturn = eGOLEDValues::GOLED_WIFI_OK;
     pTaskIF->pMQTT->bWiFiConnectionStatus=true;
     vTaskDelete(NULL);
 }
 
+/** @brief returns 10 raised to the power of some number as a uint8_t (used in mqtt coding)*/
 static uint8_t powr10 (uint8_t power)
 {
   uint8_t uiRetVal = 1;
@@ -184,16 +207,24 @@ static uint8_t powr10 (uint8_t power)
   return uiRetVal;
 }
 
+/** @brief LED control task
+ * 
+ * The task will sleep until the WiFi connection is OK.  Once the WiFi connection has been established the task will monitor the MQTT attributes and set the LEDs accordingly.
+ * 
+ * @param[inout] (void *) TaskInterface_t *
+*/
 void vLedTask(void *params);
 void vLedTask(void *params)
 {
     //Task Interface
     TaskInterface_t * pTaskIF = static_cast<TaskInterface_t *>(params);
-    int8_t * piReturn = &(pTaskIF->iGoLED);
-    
-    while (*piReturn != 2) {
+    eGOLEDValues * piReturn = &(pTaskIF->eGoLED);
+     
+    //Sleep until OK
+    while (*piReturn != eGOLEDValues::GOLED_WIFI_OK) {
         vTaskDelay(1000);
     }
+
     static uint32_t uiPreviousColour=0;
     static uint32_t uiPreviousBrightness=0;
     while (1)
@@ -202,10 +233,10 @@ void vLedTask(void *params)
         char cAttributeText[20];
         pTaskIF->pMQTT->LightOnCommand.vGetAttText(cAttributeText, uiLength);
         TextAttributeType * puiMode =  pTaskIF->pMQTT->Effect.pGetPtr();
-        if (!strcmp(cAttributeText,"ON"))
+        if (!strcmp(cAttributeText,"ON")) //Turn LEDs ON
         {
             uint32_t uiLEDRGB=0;
-            if (!strncmp(puiMode->cData,"Static",6)) 
+            if (!strncmp(puiMode->cData,"Static",6)) //Static colour mode
             {
                 //Set colour mode
                 char cRGBCode[11];
@@ -242,14 +273,13 @@ void vLedTask(void *params)
             uiRGB[2] = (uiPreviousColour & 0x0000ff00) >> 8;        
             xPixelDriver.vSetLEDs(uiRGB,0, NUM_PIXELS);
         }
-        vLedFlash();
-        vTaskDelay(100);
+        vLedFlash(200);
+        vTaskDelay(100);  //Note the total delay here will be 100 + the flash delay above ms
     }
 }
 static MQTTTaskInterface MQTTIF;
 
 int main() {
-    //assert(iInit()==0);
     
     MQTTIF.bWiFiConnectionStatus = false;
     TaskInterface_t TaskInterface;
